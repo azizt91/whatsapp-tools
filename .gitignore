@@ -1,6 +1,3 @@
-# Config file with API endpoint
-config.js
-
 # Node modules (if using build tools)
 node_modules/
 
