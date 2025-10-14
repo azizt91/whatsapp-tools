@@ -1,0 +1,20 @@
+# Config file with API endpoint
+config.js
+
+# Node modules (if using build tools)
+node_modules/
+
+# Environment files
+.env
+.env.local
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

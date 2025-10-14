@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Tools - Multi User</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <!-- Login/Register View -->
+  <div id="authView" class="view active">
+    <div class="auth-container">
+      <div class="auth-header">
+        <h1>📱 WhatsApp Tools</h1>
+        <p>Sistem Pengiriman Pesan Otomatis Multi-User</p>
+      </div>
+      
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('login')">Login</button>
+        <button class="tab-btn" onclick="switchTab('register')">Registrasi</button>
+      </div>
+      
+      <!-- Login Form -->
+      <div id="loginForm" class="tab-content active">
+        <form onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label>Nomor WhatsApp</label>
+            <input type="text" id="loginWA" placeholder="628xxx" required>
+            <small>Format: 628xxxxxxxxxx</small>
+          </div>
+          
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="loginPassword" placeholder="Password" required>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">Login</button>
+        </form>
+      </div>
+      
+      <!-- Register Form -->
+      <div id="registerForm" class="tab-content">
+        <form onsubmit="handleRegister(event)">
+          <div class="form-group">
+            <label>Nama Lengkap</label>
+            <input type="text" id="registerNama" placeholder="Nama Lengkap" required>
+          </div>
+          
+          <div class="form-group">
+            <label>Nomor WhatsApp</label>
+            <input type="text" id="registerWA" placeholder="628xxx" required>
+            <small>Password akan dikirim ke nomor WhatsApp ini</small>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">Daftar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Dashboard View -->
+  <div id="dashboardView" class="view">
+    <div class="navbar">
+      <div class="nav-left">
+        <h2>📱 WhatsApp Tools</h2>
+      </div>
+      <div class="nav-right">
+        <span id="userInfo"></span>
+        <button onclick="handleLogout()" class="btn btn-sm btn-secondary">Logout</button>
+      </div>
+    </div>
+    
+    <div class="container">
+      
+      <!-- Card: Pengaturan Akun -->
+      <div class="card">
+        <div class="card-header">
+          <h3>⚙️ Pengaturan Akun</h3>
+        </div>
+        <div class="card-body">
+          <form onsubmit="handleSaveToken(event)">
+            <div class="form-group">
+              <label>Token Fonnte API</label>
+              <input type="text" id="fonnteToken" placeholder="Masukkan token Fonnte Anda" required>
+              <small>Dapatkan token di <a href="https://fonnte.com" target="_blank">fonnte.com</a></small>
+            </div>
+            <button type="submit" class="btn btn-primary">Simpan Token</button>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Card: Kelola Pelanggan -->
+      <div class="card">
+        <div class="card-header">
+          <h3>👥 Kelola Pelanggan</h3>
+          <span id="customerCount" class="badge">0 pelanggan</span>
+        </div>
+        <div class="card-body">
+          <form onsubmit="handleUploadCSV(event)">
+            <div class="form-group">
+              <label>Upload File CSV</label>
+              <input type="file" id="csvFile" accept=".csv" required>
+              <small>
+                <strong>Format CSV:</strong> Header wajib memiliki kolom "Nama" dan "No_WhatsApp". 
+                Kolom tambahan akan menjadi parameter.<br>
+                <a href="sample_pelanggan.csv" download>📥 Download Contoh CSV</a>
+              </small>
+            </div>
+            <button type="submit" class="btn btn-primary">Upload Data</button>
+            <button type="button" onclick="clearCustomers()" class="btn btn-danger">Hapus Semua</button>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Card: Kelola Template Pesan -->
+      <div class="card">
+        <div class="card-header">
+          <h3>📝 Kelola Template Pesan</h3>
+          <button onclick="showTemplateForm()" class="btn btn-sm btn-success">+ Buat Template</button>
+        </div>
+        <div class="card-body">
+          <div id="templateForm" class="template-form" style="display:none;">
+            <form onsubmit="handleSaveTemplate(event)">
+              <input type="hidden" id="editTemplateID">
+              <div class="form-group">
+                <label>Nama Template</label>
+                <input type="text" id="templateName" placeholder="Contoh: Tagihan Bulanan" required>
+              </div>
+              
+              <div class="form-group">
+                <label>Isi Pesan</label>
+                <textarea id="templateMessage" rows="6" placeholder="Halo [nama], tagihan Anda..." required></textarea>
+                <small>
+                  <strong>Parameter tersedia:</strong> [nama], [no_whatsapp]<br>
+                  <strong>Spintax:</strong> {Halo|Hai|Selamat pagi} untuk variasi pesan
+                </small>
+              </div>
+              
+              <button type="submit" class="btn btn-primary">Simpan Template</button>
+              <button type="button" onclick="hideTemplateForm()" class="btn btn-secondary">Batal</button>
+              <button type="button" onclick="previewTemplate()" class="btn btn-info">Preview</button>
+            </form>
+          </div>
+          
+          <div id="templateList"></div>
+        </div>
+      </div>
+      
+      <!-- Card: Buat Jadwal Pengiriman -->
+      <div class="card">
+        <div class="card-header">
+          <h3>⏰ Buat Jadwal Pengiriman</h3>
+        </div>
+        <div class="card-body">
+          <form onsubmit="handleScheduleMessage(event)">
+            <div class="form-group">
+              <label>Pilih Template</label>
+              <select id="scheduleTemplate" required>
+                <option value="">-- Pilih Template --</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label>Waktu Pengiriman</label>
+              <input type="datetime-local" id="scheduleTime" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Jadwalkan Pengiriman</button>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Card: Riwayat & Status Pengiriman -->
+      <div class="card">
+        <div class="card-header">
+          <h3>📊 Riwayat & Status Pengiriman</h3>
+          <button onclick="refreshSchedules()" class="btn btn-sm btn-secondary">🔄 Refresh</button>
+        </div>
+        <div class="card-body">
+          <div id="scheduleList" class="table-container"></div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+  
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <p>Loading...</p>
+  </div>
+  
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
