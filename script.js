@@ -507,7 +507,7 @@ function displaySchedules(schedules) {
     html += `
       <tr>
         <td>${schedule.templateName}</td>
-        <td>${schedule.target_waktu}</td>
+        <td>${formatDateTime(schedule.target_waktu)}</td>
         <td><span class="status-badge ${statusClass}">${schedule.status}</span></td>
         <td>${schedule.log_info || '-'}</td>
         <td>
