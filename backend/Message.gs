@@ -159,8 +159,9 @@ function scheduleMessage(userID, templateID, targetWaktu, tag = null) {
     
     const jadwalID = generateID('JDWL');
     const targetDate = new Date(targetWaktu);
-    
-    // New row structure: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info
+    const totalPenerima = customerResult.count;
+
+    // New row structure: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info, Terkirim, Total_Penerima
     sheet.appendRow([
       jadwalID,
       userID,
@@ -168,15 +169,17 @@ function scheduleMessage(userID, templateID, targetWaktu, tag = null) {
       tag || '', // Store the tag, or empty string if null
       formatDateTime(targetDate),
       'Menunggu',
-      ''
+      '',
+      0, // Terkirim (initially 0)
+      totalPenerima // Total_Penerima
     ]);
     
     const targetGroup = tag ? `grup "${tag}"` : 'semua pelanggan';
 
     return {
       success: true,
-      message: `Jadwal berhasil dibuat! Akan dikirim ke ${customerResult.count} pelanggan di ${targetGroup}.`,
-      data: { jadwalID, customerCount: customerResult.count }
+      message: `Jadwal berhasil dibuat! Akan dikirim ke ${totalPenerima} pelanggan di ${targetGroup}.`,
+      data: { jadwalID, customerCount: totalPenerima }
     };
     
   } catch (error) {
@@ -195,7 +198,7 @@ function getSchedules(userID) {
     
     const schedules = [];
     
-    // Headers: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info
+    // Headers: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info, Terkirim, Total_Penerima
     for (let i = 1; i < data.length; i++) {
       if (data[i][1] === userID) {
         let templateName = 'Template Dihapus';
@@ -214,7 +217,9 @@ function getSchedules(userID) {
           tag: data[i][3] || 'Semua', // Show tag, default to 'Semua'
           target_waktu: data[i][4],
           status: data[i][5],
-          log_info: data[i][6]
+          log_info: data[i][6],
+          terkirim: data[i][7] || 0,
+          total_penerima: data[i][8] || 0
         });
       }
     }

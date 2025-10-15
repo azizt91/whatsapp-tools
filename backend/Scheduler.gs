@@ -2,6 +2,8 @@
 // Scheduler.gs - Automated Job Executor
 // ============================================
 
+const BATCH_SIZE = 10; // Process 10 messages per run to stay within limits
+
 function runScheduledJobs() {
   try {
     const sheet = getSheet('JadwalKirim');
@@ -10,29 +12,38 @@ function runScheduledJobs() {
     
     Logger.log(`[Scheduler] Running at ${formatDateTime(now)}`);
     
-    // Headers: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info
+    // Headers: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info, Terkirim, Total_Penerima
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      const jadwalID = row[0];
-      const userID = row[1];
-      const templateID = row[2];
-      const tag = row[3] || null; // Get the tag
-      const targetWaktu = new Date(row[4]);
       const status = row[5];
-      
-      if (status === 'Menunggu' && targetWaktu <= now) {
-        Logger.log(`[Scheduler] Processing jadwal ${jadwalID} for tag: ${tag}`);
+      const targetWaktu = new Date(row[4]);
+
+      // Process jobs that are due and are either waiting or already in progress
+      if ((status === 'Menunggu' && targetWaktu <= now) || status === 'Diproses') {
+        const jadwalID = row[0];
+        const userID = row[1];
+        const templateID = row[2];
+        const tag = row[3] || null;
+        const sentCount = parseInt(row[7] || 0);
+        const totalRecipients = parseInt(row[8] || 0);
+
+        Logger.log(`[Scheduler] Processing job ${jadwalID}. Status: ${status}, Progress: ${sentCount}/${totalRecipients}`);
         
-        sheet.getRange(i + 1, 6).setValue('Diproses'); // Status column
+        // Set status to 'Diproses' immediately
+        if (status === 'Menunggu') {
+          sheet.getRange(i + 1, 6).setValue('Diproses');
+          SpreadsheetApp.flush();
+        }
+        
+        const result = processScheduledJob(userID, templateID, jadwalID, tag, sentCount, totalRecipients);
+        
+        // Update sheet with new progress
+        sheet.getRange(i + 1, 6).setValue(result.newStatus);
+        sheet.getRange(i + 1, 7).setValue(result.logMessage);
+        sheet.getRange(i + 1, 8).setValue(result.newSentCount);
         SpreadsheetApp.flush();
         
-        const result = processScheduledJob(userID, templateID, jadwalID, tag);
-        
-        sheet.getRange(i + 1, 6).setValue(result.status); // Status column
-        sheet.getRange(i + 1, 7).setValue(result.log);    // Log_Info column
-        SpreadsheetApp.flush();
-        
-        Logger.log(`[Scheduler] Jadwal ${jadwalID} completed: ${result.log}`);
+        Logger.log(`[Scheduler] Job ${jadwalID} updated. New status: ${result.newStatus}, Progress: ${result.newSentCount}/${totalRecipients}`);
       }
     }
     
@@ -43,78 +54,79 @@ function runScheduledJobs() {
   }
 }
 
-function processScheduledJob(userID, templateID, jadwalID, tag) {
+function processScheduledJob(userID, templateID, jadwalID, tag, sentCount, totalRecipients) {
   try {
+    // Initial checks
     const userResult = getUserByID(userID);
-    if (!userResult.success) {
-      return { status: 'Gagal', log: 'User tidak ditemukan' };
-    }
-    
+    if (!userResult.success) return { newStatus: 'Gagal', logMessage: 'User tidak ditemukan', newSentCount: sentCount };
+
     const fonnteToken = userResult.data.fonnte_token;
-    if (!fonnteToken) {
-      return { status: 'Gagal', log: 'Token Fonnte belum diatur' };
-    }
-    
+    if (!fonnteToken) return { newStatus: 'Gagal', logMessage: 'Token Fonnte belum diatur', newSentCount: sentCount };
+
     const templateResult = getTemplateByID(templateID, userID);
-    if (!templateResult.success) {
-      return { status: 'Gagal', log: 'Template tidak ditemukan' };
-    }
-    
-    const customersResult = getCustomers(userID, tag, 10000); // Use the tag here
+    if (!templateResult.success) return { newStatus: 'Gagal', logMessage: 'Template tidak ditemukan', newSentCount: sentCount };
+
+    // Get all customers for this job
+    const customersResult = getCustomers(userID, tag, 10000);
     if (!customersResult.success || customersResult.data.length === 0) {
-      const logMsg = tag ? `Tidak ada pelanggan dengan tag "${tag}"` : 'Tidak ada pelanggan';
-      return { status: 'Gagal', log: logMsg };
+      return { newStatus: 'Gagal', logMessage: 'Tidak ada pelanggan untuk jadwal ini', newSentCount: 0 };
     }
-    
+
+    const allCustomers = customersResult.data;
     const template = templateResult.data.isi_pesan;
-    const customers = customersResult.data;
     
-    let successCount = 0;
-    let failCount = 0;
-    const errors = [];
+    // Determine the slice of customers to process in this run
+    const customersToProcess = allCustomers.slice(sentCount, sentCount + BATCH_SIZE);
     
-    for (let j = 0; j < customers.length; j++) {
+    if (customersToProcess.length === 0 && sentCount >= totalRecipients) {
+        return { newStatus: 'Selesai', logMessage: `Pengiriman selesai. Total: ${totalRecipients}.`, newSentCount: sentCount };
+    }
+
+    let successThisRun = 0;
+    let errors = [];
+
+    for (let j = 0; j < customersToProcess.length; j++) {
+      const customer = customersToProcess[j];
       try {
-        const customer = customers[j];
         const message = replacePlaceholders(template, customer);
-        
         const sendResult = sendWhatsAppMessage(fonnteToken, customer.no_whatsapp, message);
         
         if (sendResult.success) {
-          successCount++;
+          successThisRun++;
         } else {
-          failCount++;
           errors.push(`${customer.nama}: ${sendResult.message}`);
         }
         
-        if (j < customers.length - 1) {
-          const delay = Math.random() * 30000 + 15000; // 15-45 seconds
+        if (j < customersToProcess.length - 1) {
+          const delay = Math.random() * 20000 + 10000; // 10-30 seconds delay
           Utilities.sleep(delay);
         }
-        
-        if (j > 0 && j % 10 === 0) {
-          Logger.log(`[Scheduler] Progress ${j}/${customers.length} for job ${jadwalID}`);
-        }
-        
       } catch (customerError) {
-        failCount++;
-        errors.push(`${customers[j].nama}: ${customerError.toString()}`);
-        logError(`processScheduledJob[Customer ${j}]`, customerError);
+        errors.push(`${customer.nama}: ${customerError.toString()}`);
+        logError(`processScheduledJob[Customer: ${customer.nama}]`, customerError);
       }
     }
-    
-    const logMessage = `Selesai pada ${formatDateTime(new Date())}. ` +
-                      `Berhasil: ${successCount}/${customers.length}, Gagal: ${failCount}.` +
-                      (errors.length > 0 ? ` Error pertama: ${errors[0]}` : '');
-    
-    return {
-      status: failCount === 0 ? 'Selesai' : 'Selesai (dengan error)',
-      log: logMessage
-    };
-    
+
+    const newSentCount = sentCount + successThisRun;
+    const isJobComplete = newSentCount >= totalRecipients;
+
+    let newStatus = isJobComplete ? 'Selesai' : 'Diproses';
+    if (isJobComplete && errors.length > 0) {
+      newStatus = 'Selesai (dengan error)';
+    }
+
+    let logMessage = `Terkirim: ${newSentCount}/${totalRecipients}. `;
+    if (errors.length > 0) {
+      logMessage += `Gagal: ${errors.length} (Contoh: ${errors[0]})`;
+    } else {
+      logMessage += `Semua berhasil pada batch ini.`
+    }
+
+    return { newStatus, logMessage, newSentCount };
+
   } catch (error) {
     logError('processScheduledJob', error);
-    return { status: 'Gagal', log: 'Error: ' + error.toString() };
+    return { newStatus: 'Gagal', logMessage: `Error sistem: ${error.toString()}`, newSentCount: sentCount };
   }
 }
 

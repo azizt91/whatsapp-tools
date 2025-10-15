@@ -532,15 +532,21 @@ function displaySchedules(schedules) {
   
   schedules.forEach(schedule => {
     const statusClass = 'status-' + schedule.status.toLowerCase().replace(/\s/g, '-').replace(/[()]/g, '');
+    
+    let statusText = schedule.status;
+    if (schedule.status === 'Diproses' && schedule.total_penerima > 0) {
+      statusText = `Diproses (${schedule.terkirim} / ${schedule.total_penerima})`;
+    }
+
     html += `
       <tr>
         <td>${schedule.templateName}</td>
         <td><span class="badge">${schedule.tag}</span></td>
         <td>${formatDateTime(schedule.target_waktu)}</td>
-        <td><span class="status-badge ${statusClass}">${schedule.status}</span></td>
+        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
         <td>${schedule.log_info || '-'}</td>
         <td>
-          ${schedule.status === 'Menunggu' ? 
+          ${(schedule.status === 'Menunggu' || schedule.status === 'Diproses') ? 
             `<button onclick="cancelSchedule('${schedule.jadwalID}')" class="btn btn-sm btn-danger">Batal</button>` : 
             '-'
           }

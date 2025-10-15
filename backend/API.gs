@@ -143,9 +143,19 @@ function getSheet(sheetName) {
       sheet.getRange(1, 5).setValue('Tag').setFontWeight('bold');
     }
     
-    if (sheetName === 'JadwalKirim' && headers.indexOf('Tag') === -1) {
-      sheet.insertColumnAfter(3); // After TemplateID
-      sheet.getRange(1, 4).setValue('Tag').setFontWeight('bold');
+    if (sheetName === 'JadwalKirim') {
+      if (headers.indexOf('Tag') === -1) {
+        sheet.insertColumnAfter(3); // After TemplateID
+        sheet.getRange(1, 4).setValue('Tag').setFontWeight('bold');
+      }
+      if (headers.indexOf('Terkirim') === -1) {
+        sheet.insertColumnAfter(7);
+        sheet.getRange(1, 8).setValue('Terkirim').setFontWeight('bold');
+      }
+      if (headers.indexOf('Total_Penerima') === -1) {
+        sheet.insertColumnAfter(8);
+        sheet.getRange(1, 9).setValue('Total_Penerima').setFontWeight('bold');
+      }
     }
   }
   
@@ -166,7 +176,7 @@ function initializeSheet(sheet, sheetName) {
       headers = ['TemplateID', 'UserID', 'Nama_Template', 'Isi_Pesan'];
       break;
     case 'JadwalKirim':
-      headers = ['JadwalID', 'UserID', 'TemplateID', 'Tag', 'Target_Waktu', 'Status', 'Log_Info'];
+      headers = ['JadwalID', 'UserID', 'TemplateID', 'Tag', 'Target_Waktu', 'Status', 'Log_Info', 'Terkirim', 'Total_Penerima'];
       break;
   }
   
