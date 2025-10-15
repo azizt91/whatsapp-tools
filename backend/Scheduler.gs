@@ -10,23 +10,26 @@ function runScheduledJobs() {
     
     Logger.log(`[Scheduler] Running at ${formatDateTime(now)}`);
     
+    // Headers: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info
     for (let i = 1; i < data.length; i++) {
-      const jadwalID = data[i][0];
-      const userID = data[i][1];
-      const templateID = data[i][2];
-      const targetWaktu = new Date(data[i][3]);
-      const status = data[i][4];
+      const row = data[i];
+      const jadwalID = row[0];
+      const userID = row[1];
+      const templateID = row[2];
+      const tag = row[3] || null; // Get the tag
+      const targetWaktu = new Date(row[4]);
+      const status = row[5];
       
       if (status === 'Menunggu' && targetWaktu <= now) {
-        Logger.log(`[Scheduler] Processing jadwal ${jadwalID}`);
+        Logger.log(`[Scheduler] Processing jadwal ${jadwalID} for tag: ${tag}`);
         
-        sheet.getRange(i + 1, 5).setValue('Diproses');
+        sheet.getRange(i + 1, 6).setValue('Diproses'); // Status column
         SpreadsheetApp.flush();
         
-        const result = processScheduledJob(userID, templateID, jadwalID);
+        const result = processScheduledJob(userID, templateID, jadwalID, tag);
         
-        sheet.getRange(i + 1, 5).setValue(result.status);
-        sheet.getRange(i + 1, 6).setValue(result.log);
+        sheet.getRange(i + 1, 6).setValue(result.status); // Status column
+        sheet.getRange(i + 1, 7).setValue(result.log);    // Log_Info column
         SpreadsheetApp.flush();
         
         Logger.log(`[Scheduler] Jadwal ${jadwalID} completed: ${result.log}`);
@@ -40,38 +43,27 @@ function runScheduledJobs() {
   }
 }
 
-function processScheduledJob(userID, templateID, jadwalID) {
+function processScheduledJob(userID, templateID, jadwalID, tag) {
   try {
     const userResult = getUserByID(userID);
     if (!userResult.success) {
-      return {
-        status: 'Gagal',
-        log: 'User tidak ditemukan'
-      };
+      return { status: 'Gagal', log: 'User tidak ditemukan' };
     }
     
     const fonnteToken = userResult.data.fonnte_token;
     if (!fonnteToken) {
-      return {
-        status: 'Gagal',
-        log: 'Token Fonnte belum diatur'
-      };
+      return { status: 'Gagal', log: 'Token Fonnte belum diatur' };
     }
     
     const templateResult = getTemplateByID(templateID, userID);
     if (!templateResult.success) {
-      return {
-        status: 'Gagal',
-        log: 'Template tidak ditemukan'
-      };
+      return { status: 'Gagal', log: 'Template tidak ditemukan' };
     }
     
-    const customersResult = getCustomers(userID, 10000);
+    const customersResult = getCustomers(userID, tag, 10000); // Use the tag here
     if (!customersResult.success || customersResult.data.length === 0) {
-      return {
-        status: 'Gagal',
-        log: 'Tidak ada pelanggan'
-      };
+      const logMsg = tag ? `Tidak ada pelanggan dengan tag "${tag}"` : 'Tidak ada pelanggan';
+      return { status: 'Gagal', log: logMsg };
     }
     
     const template = templateResult.data.isi_pesan;
@@ -96,12 +88,12 @@ function processScheduledJob(userID, templateID, jadwalID) {
         }
         
         if (j < customers.length - 1) {
-          const delay = Math.random() * 30000 + 15000;
+          const delay = Math.random() * 30000 + 15000; // 15-45 seconds
           Utilities.sleep(delay);
         }
         
-        if (j % 10 === 0) {
-          Logger.log(`[Scheduler] Progress ${j + 1}/${customers.length}`);
+        if (j > 0 && j % 10 === 0) {
+          Logger.log(`[Scheduler] Progress ${j}/${customers.length} for job ${jadwalID}`);
         }
         
       } catch (customerError) {
@@ -122,10 +114,7 @@ function processScheduledJob(userID, templateID, jadwalID) {
     
   } catch (error) {
     logError('processScheduledJob', error);
-    return {
-      status: 'Gagal',
-      log: 'Error: ' + error.toString()
-    };
+    return { status: 'Gagal', log: 'Error: ' + error.toString() };
   }
 }
 

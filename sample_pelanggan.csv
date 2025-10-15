@@ -1,6 +1,6 @@
-Nama,No_WhatsApp,Tagihan,Periode,Tanggal_Jatuh_Tempo
-John Doe,628123456789,Rp 100.000,Januari 2025,31 Januari 2025
-Jane Smith,628987654321,Rp 150.000,Januari 2025,31 Januari 2025
-Ahmad Yusuf,6281234567890,Rp 200.000,Januari 2025,31 Januari 2025
-Siti Aminah,6289876543210,Rp 125.000,Januari 2025,31 Januari 2025
-Budi Santoso,628555666777,Rp 175.000,Januari 2025,31 Januari 2025
+Nama,No_WhatsApp,Tagihan,Periode,Tanggal_Jatuh_Tempo,Tag
+John Doe,628123456789,Rp 100.000,Januari 2025,31 Januari 2025,Batch 1
+Jane Smith,628987654321,Rp 150.000,Januari 2025,31 Januari 2025,Batch 1
+Ahmad Yusuf,6281234567890,Rp 200.000,Januari 2025,31 Januari 2025,Batch 2
+Siti Aminah,6289876543210,Rp 125.000,Januari 2025,31 Januari 2025,Batch 2
+Budi Santoso,628555666777,Rp 175.000,Januari 2025,31 Januari 2025,Batch 3

@@ -5,108 +5,116 @@
 function uploadCustomers(userID, csvData) {
   try {
     const sheet = getSheet('Pelanggan');
-    
     const lines = csvData.split('\n').filter(line => line.trim() !== '');
     
     if (lines.length < 2) {
-      return {
-        success: false,
-        message: 'File CSV kosong atau tidak valid!'
-      };
+      return { success: false, message: 'File CSV kosong atau tidak valid!' };
     }
     
-    const headers = lines[0].split(',').map(h => h.trim());
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
     
-    const namaIndex = headers.findIndex(h => h.toLowerCase() === 'nama');
-    const waIndex = headers.findIndex(h => h.toLowerCase() === 'no_whatsapp' || h.toLowerCase() === 'whatsapp');
+    const namaIndex = headers.indexOf('nama');
+    const waIndex = headers.indexOf('no_whatsapp');
+    const tagIndex = headers.indexOf('tag');
     
     if (namaIndex === -1 || waIndex === -1) {
-      return {
-        success: false,
-        message: 'Header CSV harus memiliki kolom "Nama" dan "No_WhatsApp"!'
-      };
+      return { success: false, message: 'Header CSV harus memiliki kolom "Nama" dan "No_WhatsApp"!' };
     }
     
+    // Find parameter columns (any column that is not a special one)
+    const specialIndices = [namaIndex, waIndex, tagIndex].filter(i => i > -1);
+    const paramIndices = headers.map((h, i) => i).filter(i => specialIndices.indexOf(i) === -1);
+
+    const rowsToInsert = [];
     let successCount = 0;
     let failCount = 0;
     const errors = [];
-    
+
     for (let i = 1; i < lines.length; i++) {
       try {
         const values = lines[i].split(',').map(v => v.trim());
-        
-        if (values.length < 2) continue;
-        
-        const pelangganID = generateID('PLG');
+        if (values.length < headers.length) continue;
+
         const nama = values[namaIndex] || '';
         const no_wa = validatePhoneNumber(values[waIndex] || '');
         
         if (!nama || !no_wa) {
           failCount++;
-          errors.push(`Baris ${i + 1}: Data tidak lengkap`);
+          errors.push(`Baris ${i + 1}: Data Nama atau No_WhatsApp kosong.`);
           continue;
         }
+
+        const pelangganID = generateID('PLG');
+        const tag = tagIndex > -1 ? values[tagIndex] : '';
         
-        const rowData = [pelangganID, userID, nama, no_wa];
+        const newRow = [pelangganID, userID, nama, no_wa, tag];
         
+        // Add parameters
         for (let j = 0; j < 10; j++) {
-          const paramIndex = j + 2;
-          if (paramIndex < values.length && paramIndex !== namaIndex && paramIndex !== waIndex) {
-            rowData.push(values[paramIndex]);
+          const paramCsvIndex = paramIndices[j];
+          if (paramCsvIndex !== undefined && values[paramCsvIndex]) {
+            newRow.push(values[paramCsvIndex]);
           } else {
-            rowData.push('');
+            newRow.push('');
           }
         }
         
-        sheet.appendRow(rowData);
+        rowsToInsert.push(newRow);
         successCount++;
-        
       } catch (rowError) {
         failCount++;
         errors.push(`Baris ${i + 1}: ${rowError.toString()}`);
       }
     }
+
+    if (rowsToInsert.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsToInsert.length, rowsToInsert[0].length).setValues(rowsToInsert);
+    }
     
     return {
       success: true,
       message: `Berhasil upload ${successCount} pelanggan` + (failCount > 0 ? `, ${failCount} gagal` : ''),
-      data: {
-        successCount,
-        failCount,
-        errors: errors.slice(0, 5)
-      }
+      data: { successCount, failCount, errors: errors.slice(0, 5) }
     };
     
   } catch (error) {
     logError('uploadCustomers', error);
-    return {
-      success: false,
-      message: 'Terjadi kesalahan: ' + error.toString()
-    };
+    return { success: false, message: 'Terjadi kesalahan: ' + error.toString() };
   }
 }
 
-function getCustomers(userID, limit = 100) {
+function getCustomers(userID, tag = null, limit = 500) {
   try {
     const sheet = getSheet('Pelanggan');
     const data = sheet.getDataRange().getValues();
+    const headers = data[0];
     
     const customers = [];
     
-    for (let i = 1; i < data.length && customers.length < limit; i++) {
-      // Convert userID to string for comparison
-      const sheetUserID = String(data[i][1]).trim();
+    for (let i = 1; i < data.length; i++) {
+      if (customers.length >= limit) break;
+
+      const row = data[i];
+      const sheetUserID = String(row[1]).trim();
+      const customerTag = String(row[4] || '').trim();
+
       if (sheetUserID === userID) {
+        if (tag && tag !== customerTag) {
+          continue; // Skip if tag is specified and doesn't match
+        }
+
         const customer = {
-          pelangganID: data[i][0],
-          nama: String(data[i][2] || ''),
-          no_whatsapp: String(data[i][3] || '')
+          pelangganID: row[0],
+          nama: String(row[2] || ''),
+          no_whatsapp: String(row[3] || ''),
+          tag: customerTag
         };
         
-        // Add parameters (convert to string to avoid date issues)
-        for (let j = 4; j < 14; j++) {
-          if (data[i][j]) {
-            customer[`parameter_${j - 3}`] = String(data[i][j]);
+        // Add parameters dynamically based on headers
+        for (let j = 5; j < headers.length; j++) {
+          if (row[j]) {
+            const paramName = headers[j].toLowerCase(); // e.g., parameter_1
+            customer[paramName] = String(row[j]);
           }
         }
         
@@ -114,18 +122,34 @@ function getCustomers(userID, limit = 100) {
       }
     }
     
-    return {
-      success: true,
-      data: customers,
-      count: customers.length
-    };
-    
+    return { success: true, data: customers, count: customers.length };
   } catch (error) {
     logError('getCustomers', error);
-    return {
-      success: false,
-      message: error.toString()
-    };
+    return { success: false, message: error.toString() };
+  }
+}
+
+function getCustomerTags(userID) {
+  try {
+    const sheet = getSheet('Pelanggan');
+    const data = sheet.getDataRange().getValues();
+    const tags = new Set();
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const sheetUserID = String(row[1]).trim();
+      const customerTag = String(row[4] || '').trim();
+
+      if (sheetUserID === userID && customerTag) {
+        tags.add(customerTag);
+      }
+    }
+
+    return { success: true, data: [...tags] };
+
+  } catch (error) {
+    logError('getCustomerTags', error);
+    return { success: false, message: error.toString(), data: [] };
   }
 }
 

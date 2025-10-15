@@ -139,53 +139,49 @@ function deleteTemplate(templateID, userID) {
   }
 }
 
-function scheduleMessage(userID, templateID, targetWaktu) {
+function scheduleMessage(userID, templateID, targetWaktu, tag = null) {
   try {
     const sheet = getSheet('JadwalKirim');
     
+    if (!templateID) return { success: false, message: 'Pilih template terlebih dahulu!' };
+    if (!targetWaktu) return { success: false, message: 'Tentukan waktu pengiriman!' };
+
     const templateResult = getTemplateByID(templateID, userID);
     if (!templateResult.success) {
-      return {
-        success: false,
-        message: 'Template tidak ditemukan!'
-      };
+      return { success: false, message: 'Template tidak ditemukan!' };
     }
     
-    const customerResult = getCustomerCount(userID);
-    if (customerResult.count === 0) {
-      return {
-        success: false,
-        message: 'Anda belum memiliki pelanggan!'
-      };
+    const customerResult = getCustomers(userID, tag, 10000); // Get customers for the tag
+    if (!customerResult.success || customerResult.count === 0) {
+      const msg = tag ? `Tidak ada pelanggan dengan tag "${tag}"` : 'Anda belum memiliki pelanggan!';
+      return { success: false, message: msg };
     }
     
     const jadwalID = generateID('JDWL');
     const targetDate = new Date(targetWaktu);
     
+    // New row structure: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info
     sheet.appendRow([
       jadwalID,
       userID,
       templateID,
+      tag || '', // Store the tag, or empty string if null
       formatDateTime(targetDate),
       'Menunggu',
       ''
     ]);
     
+    const targetGroup = tag ? `grup "${tag}"` : 'semua pelanggan';
+
     return {
       success: true,
-      message: `Jadwal berhasil dibuat! Akan dikirim ke ${customerResult.count} pelanggan.`,
-      data: {
-        jadwalID,
-        customerCount: customerResult.count
-      }
+      message: `Jadwal berhasil dibuat! Akan dikirim ke ${customerResult.count} pelanggan di ${targetGroup}.`,
+      data: { jadwalID, customerCount: customerResult.count }
     };
     
   } catch (error) {
     logError('scheduleMessage', error);
-    return {
-      success: false,
-      message: 'Terjadi kesalahan: ' + error.toString()
-    };
+    return { success: false, message: 'Terjadi kesalahan: ' + error.toString() };
   }
 }
 
@@ -199,6 +195,7 @@ function getSchedules(userID) {
     
     const schedules = [];
     
+    // Headers: JadwalID, UserID, TemplateID, Tag, Target_Waktu, Status, Log_Info
     for (let i = 1; i < data.length; i++) {
       if (data[i][1] === userID) {
         let templateName = 'Template Dihapus';
@@ -214,9 +211,10 @@ function getSchedules(userID) {
           jadwalID: data[i][0],
           templateID: data[i][2],
           templateName: templateName,
-          target_waktu: data[i][3],
-          status: data[i][4],
-          log_info: data[i][5]
+          tag: data[i][3] || 'Semua', // Show tag, default to 'Semua'
+          target_waktu: data[i][4],
+          status: data[i][5],
+          log_info: data[i][6]
         });
       }
     }
@@ -242,39 +240,30 @@ function cancelSchedule(jadwalID, userID) {
   try {
     const sheet = getSheet('JadwalKirim');
     const data = sheet.getDataRange().getValues();
-    
+    const headers = data[0];
+    const statusIndex = headers.indexOf('Status');
+    const logIndex = headers.indexOf('Log_Info');
+
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === jadwalID && data[i][1] === userID) {
-        const status = data[i][4];
+        const status = data[i][statusIndex];
         
         if (status === 'Diproses' || status === 'Selesai') {
-          return {
-            success: false,
-            message: 'Jadwal tidak dapat dibatalkan (sudah diproses/selesai)!'
-          };
+          return { success: false, message: 'Jadwal tidak dapat dibatalkan (sudah diproses/selesai)!' };
         }
         
-        sheet.getRange(i + 1, 5).setValue('Dibatalkan');
-        sheet.getRange(i + 1, 6).setValue('Dibatalkan oleh user pada ' + formatDateTime(new Date()));
+        sheet.getRange(i + 1, statusIndex + 1).setValue('Dibatalkan');
+        sheet.getRange(i + 1, logIndex + 1).setValue('Dibatalkan oleh user pada ' + formatDateTime(new Date()));
         
-        return {
-          success: true,
-          message: 'Jadwal berhasil dibatalkan!'
-        };
+        return { success: true, message: 'Jadwal berhasil dibatalkan!' };
       }
     }
     
-    return {
-      success: false,
-      message: 'Jadwal tidak ditemukan!'
-    };
+    return { success: false, message: 'Jadwal tidak ditemukan!' };
     
   } catch (error) {
     logError('cancelSchedule', error);
-    return {
-      success: false,
-      message: error.toString()
-    };
+    return { success: false, message: error.toString() };
   }
 }
 
@@ -282,18 +271,12 @@ function previewMessage(userID, templateID) {
   try {
     const templateResult = getTemplateByID(templateID, userID);
     if (!templateResult.success) {
-      return {
-        success: false,
-        message: 'Template tidak ditemukan!'
-      };
+      return { success: false, message: 'Template tidak ditemukan!' };
     }
     
-    const customersResult = getCustomers(userID, 1);
+    const customersResult = getCustomers(userID, null, 1); // Preview with any customer
     if (!customersResult.success || customersResult.data.length === 0) {
-      return {
-        success: false,
-        message: 'Belum ada data pelanggan untuk preview!'
-      };
+      return { success: false, message: 'Belum ada data pelanggan untuk preview!' };
     }
     
     const sampleCustomer = customersResult.data[0];

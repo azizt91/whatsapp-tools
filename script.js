@@ -179,6 +179,7 @@ function loadDashboardData() {
   loadCustomerCount();
   loadTemplates();
   loadSchedules();
+  loadCustomerTags();
 }
 
 // ============================================
@@ -246,6 +247,7 @@ async function handleUploadCSV(event) {
       showAlert('success', result.message);
       fileInput.value = '';
       loadCustomerCount();
+      loadCustomerTags(); // Refresh tags
     } else {
       showAlert('error', result.message);
     }
@@ -270,8 +272,31 @@ async function clearCustomers() {
   if (result.success) {
     showAlert('success', result.message);
     loadCustomerCount();
+    loadCustomerTags(); // Refresh tags
   } else {
     showAlert('error', result.message);
+  }
+}
+
+// ============================================
+// Load Customer Tags
+// ============================================
+
+async function loadCustomerTags() {
+  const result = await apiCall('getCustomerTags', 'POST', { 
+    userID: currentUser.userID 
+  });
+
+  const select = document.getElementById('scheduleTag');
+  select.innerHTML = '<option value="">-- Kirim ke Semua Pelanggan --</option>'; // Reset
+
+  if (result.success && result.data) {
+    result.data.forEach(tag => {
+      const option = document.createElement('option');
+      option.value = tag;
+      option.textContent = tag;
+      select.appendChild(option);
+    });
   }
 }
 
@@ -452,7 +477,8 @@ async function handleScheduleMessage(event) {
   
   const templateID = document.getElementById('scheduleTemplate').value;
   const waktu = document.getElementById('scheduleTime').value;
-  
+  const tag = document.getElementById('scheduleTag').value;
+
   if (!currentUser.fonnte_token) {
     showAlert('error', 'Simpan Token Fonnte terlebih dahulu!');
     return;
@@ -461,13 +487,15 @@ async function handleScheduleMessage(event) {
   const result = await apiCall('scheduleMessage', 'POST', { 
     userID: currentUser.userID, 
     templateID, 
-    targetWaktu: waktu 
+    targetWaktu: waktu,
+    tag: tag || null // Send tag, or null if 'semua'
   });
   
   if (result.success) {
     showAlert('success', result.message);
     document.querySelector('#scheduleTime').value = '';
     document.querySelector('#scheduleTemplate').value = '';
+    document.querySelector('#scheduleTag').value = '';
     loadSchedules();
   } else {
     showAlert('error', result.message);
@@ -500,13 +528,14 @@ function displaySchedules(schedules) {
     return;
   }
   
-  let html = '<table><thead><tr><th>Template</th><th>Waktu</th><th>Status</th><th>Log</th><th>Aksi</th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Template</th><th>Grup</th><th>Waktu</th><th>Status</th><th>Log</th><th>Aksi</th></tr></thead><tbody>';
   
   schedules.forEach(schedule => {
     const statusClass = 'status-' + schedule.status.toLowerCase().replace(/\s/g, '-').replace(/[()]/g, '');
     html += `
       <tr>
         <td>${schedule.templateName}</td>
+        <td><span class="badge">${schedule.tag}</span></td>
         <td>${formatDateTime(schedule.target_waktu)}</td>
         <td><span class="status-badge ${statusClass}">${schedule.status}</span></td>
         <td>${schedule.log_info || '-'}</td>

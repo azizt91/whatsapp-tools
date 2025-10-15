@@ -63,6 +63,9 @@ function handleRequest(e) {
       case 'getCustomerCount':
         result = getCustomerCount(data.userID);
         break;
+      case 'getCustomerTags':
+        result = getCustomerTags(data.userID);
+        break;
       case 'clearCustomers':
         result = clearAllCustomers(data.userID);
         break;
@@ -86,7 +89,7 @@ function handleRequest(e) {
         
       // Schedule endpoints
       case 'scheduleMessage':
-        result = scheduleMessage(data.userID, data.templateID, data.targetWaktu);
+        result = scheduleMessage(data.userID, data.templateID, data.targetWaktu, data.tag);
         break;
       case 'getSchedules':
         result = getSchedules(data.userID);
@@ -131,6 +134,19 @@ function getSheet(sheetName) {
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
     initializeSheet(sheet, sheetName);
+  } else {
+    // Schema migration for existing sheets
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    
+    if (sheetName === 'Pelanggan' && headers.indexOf('Tag') === -1) {
+      sheet.insertColumnAfter(4); // After No_WhatsApp
+      sheet.getRange(1, 5).setValue('Tag').setFontWeight('bold');
+    }
+    
+    if (sheetName === 'JadwalKirim' && headers.indexOf('Tag') === -1) {
+      sheet.insertColumnAfter(3); // After TemplateID
+      sheet.getRange(1, 4).setValue('Tag').setFontWeight('bold');
+    }
   }
   
   return sheet;
@@ -144,13 +160,13 @@ function initializeSheet(sheet, sheetName) {
       headers = ['UserID', 'Nama', 'No_WhatsApp', 'Fonnte_Token', 'Password', 'Tgl_Daftar'];
       break;
     case 'Pelanggan':
-      headers = ['PelangganID', 'UserID', 'Nama', 'No_WhatsApp', 'Parameter_1', 'Parameter_2', 'Parameter_3', 'Parameter_4', 'Parameter_5', 'Parameter_6', 'Parameter_7', 'Parameter_8', 'Parameter_9', 'Parameter_10'];
+      headers = ['PelangganID', 'UserID', 'Nama', 'No_WhatsApp', 'Tag', 'Parameter_1', 'Parameter_2', 'Parameter_3', 'Parameter_4', 'Parameter_5', 'Parameter_6', 'Parameter_7', 'Parameter_8', 'Parameter_9', 'Parameter_10'];
       break;
     case 'TemplatePesan':
       headers = ['TemplateID', 'UserID', 'Nama_Template', 'Isi_Pesan'];
       break;
     case 'JadwalKirim':
-      headers = ['JadwalID', 'UserID', 'TemplateID', 'Target_Waktu', 'Status', 'Log_Info'];
+      headers = ['JadwalID', 'UserID', 'TemplateID', 'Tag', 'Target_Waktu', 'Status', 'Log_Info'];
       break;
   }
   
