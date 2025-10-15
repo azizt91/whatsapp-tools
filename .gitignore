@@ -5,9 +5,6 @@ node_modules/
 .env
 .env.local
 
-# Config files
-config.js
-
 # Editor files
 .vscode/
 .idea/
